@@ -1,0 +1,7 @@
+--- 
+- name: BookShelf Application 
+  hosts: gcp_environment_dev
+  become: true 
+
+  roles:
+    - role: book_app

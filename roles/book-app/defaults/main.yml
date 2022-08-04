@@ -1,0 +1,7 @@
+---
+# defaults file for /opt/ansible/roles/bookshelf
+project_id: final-bookshelf-shah
+passwd: ilovetua
+sql_database_name: dbshah
+sql_connection_name: final-bookshelf-shah:us-east1:tanceshah
+bucket_name: shah-buc

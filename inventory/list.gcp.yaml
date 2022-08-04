@@ -1,0 +1,9 @@
+--- 
+plugin: gcp_compute
+projects:
+  - final-bookshelf-shah
+auth_kind: serviceaccount
+service_account_file: /opt/ansible/inventory/ansiblekey.json
+keyed_groups:
+  - prefix: gcp
+    key: labels

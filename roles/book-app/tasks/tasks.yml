@@ -1,0 +1,156 @@
+---
+
+# Install fluentd logging monitor
+
+- name: Installing Google Cloud Ops agent
+  get_url: 
+    url: https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+    dest: /usr/local/bin
+    mode: 0777
+- name: Executing the script
+  ansible.builtin.command:
+    cmd: sh /usr/local/bin add-google-cloud-ops-agent-repo.sh --also-install
+
+
+# Cloud SQL Proxy
+
+- name: Download the Cloud SQL Auth proxy and making it executable 
+  get_url:
+    url: https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64
+    dest: /usr/local/bin
+    mode: 0755
+
+- name: Renaming the Cloud SQL AUth Proxy File 
+  ansible.builtin.command:
+    cmd: mv /usr/local/bin/cloud_sql_proxy.linux.amd64 /usr/local/bin/cloud_sql_proxy
+
+- name: Setting up Cloud SQL Auth proxy as a systemd service
+  template: 
+    src: templates/cloud-sql-proxy.j2 
+    dest: /etc/systemd/system/cloud-sql-proxy.service
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Enabling cloud sql proxy service 
+  systemd:
+    name: cloud-sql-proxy
+    enabled: true
+    
+- name: Starting Cloud SQL Auth Proxy 
+  systemd:
+    name: cloud-sql-proxy
+    state: started
+    daemon_reload: "yes"
+
+
+# APT packages installation
+
+- name: Installing dependencies from apt 
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  loop:
+    - 'git'
+    - 'build-essential'
+    - 'supervisor'
+    - 'python'
+    - 'python-dev'
+    - 'python-pip'
+    - 'python3-pip'
+    - 'libffi-dev'
+    - 'libssl-dev'
+
+
+#Git Cloning Repo and Setting up config.py file 
+
+
+- name: Checking if Repo exists already
+  stat:
+    path: /opt/app/
+  register: info
+
+- name: Git Cloning 
+  ansible.builtin.git:
+    repo: https://github.com/GoogleCloudPlatform/getting-started-python.git
+    version: steps
+    dest: /opt/app
+    clone: yes 
+  when: not info.stat.exists
+
+
+- name: Setting up config.py  
+  template: 
+    src: templates/config.j2 
+    dest: /opt/app/7-gce/config.py
+    mode: 0777
+
+- name: Deleting Procfile 
+  ansible.builtin.command:
+    cmd: sudo rm /opt/app/7-gce/procfile
+
+    
+- name: Setting up procfile
+  template:
+    src: templates/procfile.j2
+    dest: /opt/app/7-gce/procfile
+    mode: 0777
+
+
+# Pip dependency installation and virtual environment setup
+
+- name: Upgrading pip 
+  ansible.builtin.pip:
+    name: pip
+    state: latest
+
+
+- name: Installing virtualenv
+  ansible.builtin.pip:
+    name: virtualenv
+
+
+- name: Installing Packages using virtualenv
+  ansible.builtin.pip:
+    virtualenv: /opt/app/7-gce/env
+    virtualenv_python: python3.5
+    extra_args: --prefer-binary
+    requirements: /opt/app/7-gce/requirements.txt
+    state: present
+
+- name: Run python model_cloudsql.py command from application virtual environment 
+  ansible.builtin.command:
+    cmd: /opt/app/7-gce/env/bin/python /opt/app/7-gce/bookshelf/model_cloudsql.py 
+
+
+# User Configuration
+
+- name: User creation
+  ansible.builtin.user:
+    name: pythonapp
+    home: /home/pythonapp
+
+- name: Make pythonapp user own the application code
+  ansible.builtin.file:
+    recurse: yes
+    owner: pythonapp
+    group: pythonapp 
+    path: /opt/app
+    
+# Supervisor Configuration
+
+- name: Configure supervisor to start gunicorn
+  template:
+    src: python-app.j2
+    dest: /etc/supervisor/conf.d/python-app.conf
+    owner: pythonapp
+
+
+- name: Supervisor Rereading 
+  ansible.builtin.command:
+    cmd: supervisorctl reread
+
+- name: Supervisor Updating
+  ansible.builtin.command:
+    cmd: supervisorctl update
